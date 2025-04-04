@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Correlation Details</title>
+    <!-- Include DataTables CSS & jQuery -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+        }
+        h1 {
+            font: bold 16pt Arial, Helvetica, Geneva, sans-serif;
+            color: #336699;
+        }
+        h2{
+            font: bold 10pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        table.dataTable tbody td {
+            font: 8pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+        table.dataTable thead th {
+            font: bold 9pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+        #summaryTable tbody td {
+            font: 8pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+        #summaryTable thead th {
+            font: bold 9pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body> 
+    
+    <h1>Correlation Details for ID: {{.CorrelationID}}</h1>
+    
+    <table id="correlationDetailsTable" class="display">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Correlation ID</th>
+                <th>Thread ID</th>
+                <th>Duration</th>
+                <th>Call Type</th>
+                <th>Start Time</th>
+                <th>Method Name</th>
+                <th>Request Query</th>
+                <th>Request Path</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .CorrelationDetails }}
+            <tr>
+                <td>{{ .Timestamp }}</td>
+                <td>{{ .CorrelationId }}</td>
+                <td>{{ .ThreadId }}</td>
+                <td>{{ .TotalDurationForRequest }}</td>
+                <td>{{ .CallType}}</td>
+                <td>{{ .StartTime }}</td>
+                <td>{{ .MethodName }}</td>
+                <td>{{ .RequestQuery }}</td>
+                <td>{{ .RequestPath }}</td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+    
+    
+        <table id="summaryTable" class="display">
+            <thead>
+                <tr>
+                    <th>Total Duration (ms)</th>
+                    <th>Total Duration for Query Calls (ms)</th>
+                    <th>Time Difference (ms)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{.TotalDuration}}</td>
+                    <td>{{.TotalExecutionTime}}</td>
+                    <td>{{.DurationDifference}}</td>
+                </tr>
+            </tbody>
+        </table>
+    
+
+    <h2>Query Execution Time Chart</h2>
+    <div id="container" style="width:100%; height:500px;"></div>
+    
+    <script>
+        // Pass timeDifferences as a JSON object to JavaScript
+        var timeDifferences = JSON.parse('{{ .TimeDifferences | toJSON }}');
+        console.log(timeDifferences);
+
+        var data=[];
+
+        timeDifferences.slice().reverse().forEach(element => {
+        if (element.query == "Idle") {
+            data.push({ name: "java_processing", data: [element.duration], color: 'grey' });
+        }
+        else if (element.query === "null"){
+            data.push({ name: element.CallType, data: [element.duration], color: 'red' });
+        }
+        else {
+            data.push({ name: element.query, data: [element.duration], color: 'red' });
+        }
+    });
+
+        console.log(data);
+        console.log(timeDifferences);
+    
+        Highcharts.chart('container', {
+            chart: {
+                type: 'bar'
+            },
+            title: {
+                text: 'Query Execution Time Comparison',
+                align: 'left'
+            },
+            xAxis: {
+                categories: ['Query 1']
+            },
+            yAxis: {
+                min: 0,
+                title: {   
+                    text: 'Time (ms)'
+                }
+            },
+            legend: {
+                reversed: true
+            },
+            plotOptions: {
+                series: {
+                    stacking: 'normal',
+                    dataLabels: {
+                        enabled: true
+                    },
+                    point: {
+                        events: {
+                            mouseOver: function () {
+                                copyToClipboard(this.series.name);
+                            }
+                        }
+                    }
+                }
+            },
+            tooltip: {
+                formatter: function () {
+                    return `<b>${this.series.name}</b>: ${this.y} ms`;
+                }
+            },
+            series: data    
+        });
+
+        // Function to copy text to clipboard
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            console.log(`Copied: ${text}`);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+}
+    </script>
+     
+    <h2>Request Query Statistics</h2>
+    <table id="correlationStats" class="display">
+        <thead>
+            <tr>
+                <th>Elapsed Time(ms)</th>
+                <th>Executions</th>
+                <th>Max Time (ms)</th>
+                <th>Elapsed Time per Exec (ms)</th>
+                <th>Min time (ms)</th>
+                <th>Query</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .QueryStats }}
+            <tr>
+                <td>{{ printf "%.2f" .TotalTimeMillis }}</td>
+                <td>{{ .Count }}</td>
+                <td>{{ printf "%.2f" .MaxTimeMillis}}</td>
+                <td>{{ printf "%.2f" .AverageTimeMillis}}</td>
+                <td>{{ printf "%.2f" .MinTimeMillis}}</td>
+                <td>{{ .Query }}</td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+    
+    <script>
+        $(document).ready(function () {
+            $('#correlationDetailsTable, #correlationStats').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 10,
+                order: [[0, "desc"]]
+            });
+        });
+    </script>
+</body>
+</html>

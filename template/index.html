@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>File Upload and Request Path Counts</title>
+  <!-- Include DataTables CSS & jQuery (make sure to include these if not already present) -->
+  <!-- Include DataTables CSS -->
+  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <!-- Include jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Include DataTables JS -->
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            /* background-color: #f4f4f9; */
+            color: #333;
+        }
+
+        h1 {
+            font: bold 16pt Arial, Helvetica, Geneva, sans-serif;
+            color: #336699;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="file"] {
+            padding: 0.6rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="file"]:hover, input[type="file"]:focus {
+            border-color: #007BFF;
+            outline: none;
+        }
+
+        button {
+            padding: 0.8rem;
+            background-color: #007BFF;
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .result h2 {
+            font: bold 10pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        table th, table td {
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        table.dataTable tbody td {
+            font: 8pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+        table.dataTable thead th {
+            font: bold 9pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+
+        table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        table tbody tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 20px;
+                padding: 1.5rem;
+            }
+
+            button {
+                font-size: 0.9rem;
+                padding: 0.6rem;
+            }
+
+            input[type="file"] {
+                font-size: 0.9rem;
+            }
+
+            .result h2 {
+                font: bold 10pt Arial, Helvetica, Geneva, sans-serif;
+                color: black;
+            }
+        }
+
+        /* Floating plus button */
+        .floating-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        .file-info h2 {
+            font: bold 10pt Arial, Helvetica, Geneva, sans-serif;
+            color: black;
+        }
+
+        .chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            margin-top: 20px;
+            height: 400px;  /* Add a consistent height */
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>File Upload and Request Path Counts</h1>
+
+    
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            <label for="uploadFile">Select a file:</label>
+            <input type="file" name="uploadedFile" multiple required>
+            <input type="hidden" name="uniqueID" id="uniqueID"> 
+            <button type="submit">Upload</button>
+        </form>
+
+        <!-- Initially Hidden Charts -->
+        <div id="chartsContainer" style="display: none;">
+            
+            <div class="chart-container">
+                <canvas id="myChart1" style="width:700px;max-width:700px"></canvas>
+            </div>
+                
+            <div class="chart-container">
+                <canvas id="myChart2" style="max-width: 700px;"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="queryPieChart" style="width:700px;max-width:700px"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="queryBarChart" style="width:100%;max-width:700px"></canvas>
+            </div>
+        </div>
+
+        <div class="file-info">
+            <h2>Uploaded Files:</h2>
+            {{if .FileNames}}
+                <ul>
+                    {{range .FileNames}}
+                        <li>{{.}}</li>
+                    {{end}}
+                </ul>
+            {{else}}
+                <p>No files uploaded yet.</p>
+            {{end}}
+        </div>
+
+        <!-- Show Charts when file is uploaded -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                document.getElementById("chartsContainer").style.display = "block";
+            });
+        </script>    
+    
+        <!-- Display results dynamically using Go's template engine -->
+        {{ if .RequestPathStats }}
+        <div class="result">
+            <h2>HTTP-IN-Response Request Path Counts:</h2>
+            <table id="requestPathTable" class="display">
+                <thead>
+                    <tr>
+                        <th>Request Path</th>
+                        <th>Count</th>
+                        <th>Average Time (ms)</th>
+                        <th>Maximum Time (ms)</th>
+                        <th>Minimum Time (ms)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range $path, $details := .RequestPathStats }}
+                    <tr>
+                        <td class="request-path" data-path="{{ $path }}">{{ $path }}</td>
+                        <td>{{ $details.Count }}</td>
+                        <td>{{ printf "%.2f" $details.AverageTime }}</td>
+                        <td>{{ printf "%.2f" $details.MaxTime}}</td>
+                        <td>{{ printf "%.2f" $details.MinTime}}</td>
+                        
+                        
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>            
+        </div>
+        {{ end }}
+
+        {{ if .QueryMetrics }}
+        <div class="result">
+            <h2>Request Query Metrics (Excluding callTypes:HTTP-IN-Request & HTTP-IN-Response):</h2>
+            <table id="queryMetricsTable" class="display">
+                <thead>
+                    <tr>
+                        <th>Elapsed Time (ms)</th>
+                        <th>Count</th>
+                        <th>Maximum Time (ms)</th>
+                        <th>Elapsed Time Per Execution(ms)</th>
+                        <th>Minimum Time (ms)</th>
+                        <th>Request Query</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range $query, $metrics := .QueryMetrics }}
+                    <tr>
+                        <td>{{ printf "%.2f" $metrics.TotalTime}}</td>
+                        <td class="all-queries">{{ $metrics.Count }}</td>
+                        <td>{{ printf "%.2f" $metrics.MaxTime }}</td>
+                        <td>{{ printf "%.2f" $metrics.AverageTime }}</td>
+                        <td>{{ printf "%.2f" $metrics.MinTime }}</td>
+                        <td>{{ $query }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+
+            <h2>HTTP-In-Responses Data</h2>
+            <table id="requestTable" class="display">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Correlation ID</th>
+                        <th>Thread ID</th>
+                        <th>Duration</th>
+                        <th>Call Type</th>
+                        <th>Start Time</th>
+                        <th>Method Name</th>
+                        <th>Request Query</th>
+                        <th>Request Path</th>
+                    </tr>
+                </thead>
+                <tbody>{{range .HttpResponses}}
+                    <tr>
+                        <td>{{ .Timestamp }}</td>
+                        <td>{{ .CorrelationId }}</td>
+                        <td>{{ .ThreadId }}</td>
+                        <td>{{ .TotalDurationForRequest }}</td>
+                        <td>{{ .CallType }}</td>
+                        <td>{{ .StartTime }}</td>
+                        <td>{{ .MethodName }}</td>
+                        <td>{{ .RequestQuery }}</td>
+                        <td>{{ .RequestPath }}</td>
+                    </tr>
+                    {{end}}
+                </tbody>                                
+            </table>
+            <button class="floating-btn" type="button" onclick="getNewWindow()">+</button>
+        </div>
+        {{ end }}
+    </div>
+
+    <script>
+        // Initialize DataTables
+        $(document).ready(function () {
+            // Ensure DataTables is initialized only once
+            if (!$.fn.dataTable.isDataTable('#requestPathTable')) {
+                $('#requestPathTable').DataTable({
+                    paging: true,
+                    searching: true,
+                    ordering: true,
+                    info: true,
+                    lengthChange: true,
+                    pageLength: 10,
+                    columnDefs: [
+                        { type: "num", targets: 2 } // Ensure Average Time column is treated as a number
+                    ],
+                    order: [[2, "desc"]] // Sort by Average Time (ms) in descending order
+                });
+            }
+
+            // Click event for navigating to request details
+            $(document).on('click', '.request-path', function () {
+                var path = $(this).data('path');
+                console.log('Navigating to:', path);
+                console.log('Tab UUID:', window.name); // Tab UUID print
+
+                window.location.href = '/request-details?path=' + encodeURIComponent(path) + '&tabUUID=' + encodeURIComponent(window.name);
+            });
+         });
+
+        // Initialize DataTables for the Query Stats table
+        $(document).ready(function () {
+            console.log("Initializing DataTable...");
+
+            $('#queryMetricsTable').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 10,
+                order: [[3, "desc"]]
+            });
+
+            console.log("DataTable initialized successfully.");
+
+            // Attach click event to the executions cells
+            $('#queryMetricsTable tbody').on('click', '.all-queries', function () {
+                console.log("Row clicked in queryMetricsTable.");
+
+                // Retrieve the query text from the last cell in the clicked row
+                var query = $(this).closest('tr').find('td:last').text().trim();
+                console.log("Extracted query:", query);
+
+                // Get tabUUID from the URL parameters
+                var tabUUID = window.name;
+                console.log("Tab UUID:", tabUUID);
+
+                if (query && tabUUID) {
+                    console.log("Redirecting to queryExecutions page...");
+                    window.location.href = "/queryExecutions?query=" + encodeURIComponent(query) + "&tabUUID=" + encodeURIComponent(tabUUID);
+                } else {
+                    console.error("Missing query or tabUUID");
+                    alert("Error: Missing query or tabUUID");
+                }
+            });
+        });
+
+
+        $(document).ready(function (){
+            $('#requestTable').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 10,
+                order: [[3, "desc"]],
+            })
+        })
+
+        // Function to generate a simple UUID
+        function generateUUID() {
+            return 'xxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0,
+                    v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // Function to ensure the tab has a UUID
+        function ensureTabUUID() {
+            // If window.name doesn't already have a UUID, assign one
+            if (!window.name) {
+                const uuid = generateUUID();
+                window.name = uuid;
+                console.log('Tab UUID set:', window.name);
+            } else {
+                console.log('Existing Tab UUID:', window.name);
+            }
+            // Set the UUID to the hidden input field
+            document.getElementById('uniqueID').value = window.name;
+        }
+
+        // Function to open a new tab and handle UUID for isolation
+        function getNewWindow() {
+            // Generate a UUID for the new tab
+            const uuid = generateUUID();
+
+            // Open a new tab with the same 'index.html' and set window.name to UUID for isolation
+            const newWindow = window.open(location.href, '_blank');            
+        }
+
+        // Ensure each tab has a unique ID
+        ensureTabUUID();
+
+        //Script for chart1 Pie chart
+        document.addEventListener("DOMContentLoaded", function () {
+            var xValues = [];
+            var yValues = [];
+
+        // Function to generate random colors dynamically
+        function generateColors(count) {
+            let colors = [];
+            for (let i = 0; i < count; i++) {
+                let hue = (i * 137.5) % 360; // Distribute hues evenly
+                colors.push(`hsl(${hue}, 70%, 50%)`); // Keep saturation and lightness constant
+            }
+            return colors;
+        }
+
+        // Select all rows from the request path table
+        document.querySelectorAll("#requestPathTable tbody tr").forEach(row => {
+            let requestPath = row.querySelector(".request-path").dataset.path; // Get the path
+            let count = parseInt(row.cells[1].innerText); // Get the count
+
+            // Only push the values if the count is greater than 1
+            if (count > 1) {
+                xValues.push(requestPath);
+                yValues.push(count);
+            }
+        });
+
+        // Only display the chart if there are any values
+        if (xValues.length > 0 && yValues.length > 0) {
+            let dynamicColors = generateColors(xValues.length); // Generate dynamic colors
+
+            // Create the Pie chart
+            var myChart = new Chart("myChart1", {
+                type: "pie", // Using Pie Chart
+                data: {
+                    labels: xValues, // Request paths
+                    datasets: [{
+                        backgroundColor: dynamicColors, // Assign generated colors
+                        data: yValues, // Counts for each request path
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true, // Make the chart responsive
+                    plugins: {
+                        legend: false, // Display legend
+                        tooltip: false // Enable tooltips
+                    },
+                    title: {
+                        display: true,
+                        text: "Request Path vs Counts (Count > 1)"
+                    },
+                    onHover: function(e, activePoints) {
+                        // Check if there's any point hovered over
+                        if (activePoints.length > 0) {
+                            var index = activePoints[0]._index; // Get the index of the hovered slice
+                            var hoveredPath = xValues[index]; // Get the corresponding request path
+                            console.log('Hovered over path:', hoveredPath); // Display the hovered path in the console
+                        }
+                    },
+                    onClick: function(e) {
+                        var activePoints = myChart.getElementsAtEventForMode(e, 'nearest', {intersect: true}, true);
+                        if (activePoints.length > 0) {
+                            var index = activePoints[0]._index; // Get the index of the clicked slice
+                            var selectedPath = xValues[index]; // Get the corresponding request path
+                            console.log('Navigating to request details for path:', selectedPath);
+
+                            // Redirect to the request details page with the selected path
+                            window.location.href = '/request-details?path=' + encodeURIComponent(selectedPath) + '&tabUUID=' + encodeURIComponent(window.name);
+                        }
+                    }
+                }
+            });
+            } else {
+                console.log("No request paths with count greater than 1.");
+            }
+        });
+
+        //Script for Chart2 bar chart (Request Path vs Average time)
+        document.addEventListener("DOMContentLoaded", function () {
+            var xValues = [];
+            var yValues = [];
+            
+            //Function to generate dynamic colors
+            function generateColors(count) {
+                let colors = [];
+                for (let i = 0; i < count; i++){
+                    let hue = (i * 137.5) % 360;
+                    colors.push(`hsl(${hue}, 70%, 50%)`);
+                }
+                return colors;
+            }
+
+                // Select all rows from the request path table
+            document.querySelectorAll("#requestPathTable tbody tr").forEach(row => {
+                let requestPath = row.querySelector(".request-path").dataset.path; // Get the path
+                let avgTime = parseFloat(row.cells[2].innerText); // Get the count
+
+                if (avgTime > 1000){
+                    xValues.push(requestPath);
+                    yValues.push(avgTime);
+                }    
+            });
+                if (xValues.length > 0 && yValues.length > 0) {
+                    let dynamicColors = generateColors(xValues.length); // Generate colors dynamically // Generate colors dynamically
+
+                    new Chart("myChart2", {
+                        type: "bar",
+                        data: {
+                            labels: xValues,
+                            datasets: [{
+                                backgroundColor: dynamicColors, // Use generated colors
+                                data: yValues
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(tooltipItems) {
+                                            let index = tooltipItems[0].dataIndex;
+                                            return fullQueries[index]; // Show full query when hovering
+                                        },
+                                        label: function(tooltipItem) {
+                                            return `Avg Time: ${tooltipItem.raw} ms`; // Show time in tooltip
+                                        }
+                                    }
+                                }
+                            },
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: "Request Path vs Average Time (ms) (AvgTime > 1000ms)"
+                            },
+                            onHover: function (event, activeElements) {
+                                if (activeElements.length > 0) {
+                                    var index = activeElements[0]._index;
+                                    var hoveredPath = xValues[index];
+                                    console.log('Hovered over path:', hoveredPath);
+                                }
+                            },
+                            onClick: function (event, elements) {
+                                if (elements.length > 0) {
+                                    var index = elements[0]._index;
+                                    var selectedPath = xValues[index];
+                                    console.log('Navigating to request details for path:', selectedPath);
+
+                                    // Redirect to the request details page
+                                    window.location.href = '/request-details?path=' + encodeURIComponent(selectedPath) + '&tabUUID=' + encodeURIComponent(window.name);
+                                }
+                            }
+                        }
+                    });
+                }                  
+        });
+
+            // Script for Chart3 - Pie chart (Request Query vs Count)
+        document.addEventListener("DOMContentLoaded", function () {
+            var xValues = [];
+            var yValues = [];
+            var fullQueries = []; // Store full query values
+
+            // Function to generate distinct colors dynamically
+            function generateColors(count) {
+                let colors = [];
+                for (let i = 0; i < count; i++) {
+                    let hue = (i * 137.5) % 360; // Distribute hues evenly
+                    colors.push(`hsl(${hue}, 70%, 50%)`); // Use HSL for distinct colors
+                }
+                return colors;
+            }
+
+            // Select all rows from the query metrics table
+            document.querySelectorAll("#queryMetricsTable tbody tr").forEach(row => {
+                let query = row.cells[5].innerText; // Request Query
+                let count = parseInt(row.cells[1].innerText); // Count
+
+                if (count > 100) {
+                    fullQueries.push(query); // Store full query separately
+
+                    // Truncate long query names (limit to 30 characters)
+                    let truncatedQuery = query.length > 30 ? query.substring(0, 30) + "..." : query;
+
+                    xValues.push(query);
+                    yValues.push(count);
+                }
+            });
+
+            if (xValues.length > 0 && yValues.length > 0) {
+                let dynamicColors = generateColors(xValues.length); // Generate colors dynamically
+
+                var queryChart = new Chart("queryPieChart", {
+                    type: "pie", // Using Pie Chart
+                    data: {
+                        labels: xValues, // Request paths
+                        datasets: [{
+                            backgroundColor: dynamicColors, // Assign generated colors
+                            data: yValues, // Counts for each request path
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true, // Make the chart responsive
+                        plugins: {
+                            legend:  false, // Display legend
+                            tooltip: false // Enable tooltips
+                        },
+                        title: {
+                            display: true,
+                            text: "Request Queries vs Counts (Count > 100)"
+                        },
+                        onHover: function (e, activePoints) {
+                            if (activePoints.length > 0) {
+                                var index = activePoints[0]._index; // Get the index of the hovered bar
+                                var hoveredQuery = fullQueries[index]; // Get the corresponding full query
+                                console.log('Hovered over query:', hoveredQuery); // Display hovered query in console
+                            }
+                        },
+                        onClick: function (e) {
+                            var activePoints = queryChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                            if (activePoints.length > 0) {
+                                var index = activePoints[0]._index;
+                                var selectedQuery = fullQueries[index]; // Use full query
+                                console.log('Navigating to queryExecutions for query:', selectedQuery);
+
+                                // Redirect to queryExecutions page with the selected query
+                                window.location.href = `/queryExecutions?query=${encodeURIComponent(selectedQuery)}&tabUUID=${encodeURIComponent(window.name)}`;
+                            }
+                        }
+                    }
+                });
+            } else {
+                console.log("No request paths with count greater than 1.");
+            }
+        });
+
+
+        // Script for Chart4 - Bar chart (Request Query vs Average Time)
+        document.addEventListener("DOMContentLoaded", function () {
+            var xValues = [];
+            var yValues = [];
+            var fullQueries = []; // Store full query values
+
+            // Function to generate distinct colors dynamically
+            function generateColors(count) {
+                let colors = [];
+                for (let i = 0; i < count; i++) {
+                    let hue = (i * 137.5) % 360; // Distribute hues evenly
+                    colors.push(`hsl(${hue}, 70%, 50%)`); // Use HSL for distinct colors
+                }
+                return colors;
+            }
+
+            // Select all rows from the query metrics table
+            document.querySelectorAll("#queryMetricsTable tbody tr").forEach(row => {
+                let query = row.cells[5].innerText.trim(); // Request Query
+                let avgTime = parseFloat(row.cells[3].innerText.trim()); // Average Time
+
+                if (avgTime > 100) {
+                    fullQueries.push(query); // Store full query separately
+
+                    // Truncate long query names (limit to 30 characters)
+                    let truncatedQuery = query.length > 30 ? query.substring(0, 30) + "..." : query;
+
+                    xValues.push(truncatedQuery);
+                    yValues.push(avgTime);
+                }
+            });
+
+            if (xValues.length > 0 && yValues.length > 0) {
+                let dynamicColors = generateColors(xValues.length); // Generate colors dynamically
+
+                var queryChart = new Chart("queryBarChart", {
+                    type: "bar",
+                    data: {
+                        labels: xValues,
+                        datasets: [{
+                            backgroundColor: dynamicColors, // Use generated colors
+                            data: yValues
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    callback: function(value, index) {
+                                        return xValues[index]; // Show truncated labels
+                                    }
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Average Time (ms)'
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    title: function(tooltipItems) {
+                                        let index = tooltipItems[0].dataIndex;
+                                        return fullQueries[index]; // Show full query when hovering
+                                    },
+                                    label: function(tooltipItem) {
+                                        return `Avg Time: ${tooltipItem.raw} ms`; // Show time in tooltip
+                                    }
+                                }
+                            }
+                        },
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: "Request Queries vs Average Time (ms) (AvgTime > 100ms)"
+                        },
+                        onHover: function(e, activePoints) {
+                            if (activePoints.length > 0) {
+                                var index = activePoints[0]._index; // Get the index of the hovered bar
+                                var hoveredQuery = fullQueries[index]; // Get the corresponding full query
+                                console.log('Hovered over query:', hoveredQuery); // Display hovered query in console
+                            }
+                        },
+                        onClick: function (e) {
+                            var activePoints = queryChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                            if (activePoints.length > 0) {
+                                var index = activePoints[0]._index;
+                                var selectedQuery = fullQueries[index]; // Use full query
+                                console.log('Navigating to queryExecutions for query:', selectedQuery);
+
+                                // Redirect to queryExecutions page with the selected query
+                                window.location.href = `/queryExecutions?query=${encodeURIComponent(selectedQuery)}&tabUUID=${encodeURIComponent(window.name)}`;
+                            }
+                        }
+                    }
+                });
+            } else {
+                console.log("No query metrics with an average time greater than 100ms.");
+            }
+        });
+
+        
+    </script>    
+</body>
+</html>
