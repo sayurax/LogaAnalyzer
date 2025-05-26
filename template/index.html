@@ -11,6 +11,7 @@
   <!-- Include DataTables JS -->
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         body {
@@ -157,6 +158,61 @@
             height: 400px;  /* Add a consistent height */
         }
 
+        .performance-info {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .overview-row {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .overview-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 150px;
+            font-family: Arial, sans-serif;
+        }
+
+        .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .value {
+            font-size: 1.2em;
+            color: #007bff;
+        }
+
+        /* ✅ Completion Message */
+        .completion-message {
+            margin-top: 20px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .completion-success {
+            background-color: #e6f4ea;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+        }
+
+        .completion-warning {
+            background-color: #fff3e0;
+            color: #ef6c00;
+            border: 1px solid #ffb74d;
+        }
+
+
     </style>
 </head>
 <body>
@@ -170,75 +226,163 @@
             <button type="submit">Upload</button>
         </form>
 
-        <!-- Initially Hidden Charts -->
-<div id="chartsContainer" style="display: none;">
+         <!-- Initially Hidden Charts -->
+        <div id="chartsContainer" style="display: none;">
 
-    <!-- Chart 1: Request Path Pie Chart -->
-    <div class="chart-container">
-        <div style="text-align: center; margin-bottom: 10px;">
-            <label for="countThreshold"><strong>Show request paths with count greater than:</strong></label>
-            <input type="number" id="countThreshold" value="1" min="1" />
-            <button id="updateChartBtn">Update Chart</button>
+            <div class="file-info">
+                <h2>Uploaded Files:</h2>
+                {{if .FileNames}}
+                    <ul>
+                        {{range .FileNames}}
+                            <li>{{.}}</li>
+                        {{end}}
+                    </ul>
+                {{else}}
+                    <p>No files uploaded yet.</p>
+                {{end}}
+            </div>
+
+            <div class="performance-info">
+                <h2>Performance Overview</h2>
+                <div class="overview-row">
+                    <div class="overview-column">
+                        <div class="label">Total Request Count</div>
+                        <div class="value">{{ .OverallRequestStats.TotalHTTPRequests }}</div>
+                    </div>
+                    <div class="overview-column">
+                        <div class="label">Total Response Count</div>
+                        <div class="value">{{ .OverallRequestStats.TotalHTTPResponses}}</div>
+                    </div>
+                    <div class="overview-column">
+                        <div class="label">Average Time (ms)</div>
+                        <div class="value">{{ printf "%.2f" .OverallRequestStats.Average }}</div>
+                    </div>
+                    <div class="overview-column">
+                        <div class="label">95th Percentile (ms)</div>
+                        <div class="value">{{ printf "%.2f" .OverallRequestStats.Percentile }}</div>
+                    </div>
+                </div>
+
+                <div class="completion-message {{ if eq .OverallRequestStats.TotalHTTPRequests .OverallRequestStats.TotalHTTPResponses }}completion-success{{ else }}completion-warning{{ end }}">
+                    {{ .OverallRequestStats.CompletionMessage }}
+                </div>
+                
+            </div>
+
+            <div class="chart-container">
+                <canvas id="timeBucketChart" width="800" height="400"></canvas>
+            </div>
+
+                <!-- Show Charts when file is uploaded -->
+            <script>
+                document.addEventListener("DOMContentLoaded", function () {
+                    document.getElementById("chartsContainer").style.display = "block";
+                });
+            </script>
+            
+            <script id="timeBucketData" type="application/json">
+                {{ marshal .TimeBuckets }}
+            </script>
+
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const rawTimeBuckets = JSON.parse(document.getElementById('timeBucketData').textContent || '{}');
+
+                    // Debug: Ensure it's not empty
+                    console.log("Parsed time bucket data:", rawTimeBuckets);
+
+                    const labels = Object.keys(rawTimeBuckets).sort();
+                    const durations = labels.map(k => rawTimeBuckets[k].AvgDuration);
+                    const requestCounts = labels.map(k => rawTimeBuckets[k].RequestCount);
+                    const percentiles = labels.map(k => rawTimeBuckets[k].Percentile95);
+
+                    const ctx = document.getElementById('timeBucketChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Request Count',
+                                data: requestCounts,
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const index = context.dataIndex;
+                                            const count = requestCounts[index];
+                                            const avg = durations[index].toFixed(2);
+                                            const p95 = percentiles[index].toFixed(2);
+                                            return [
+                                                `Requests: ${count}`,
+                                                `Avg Duration: ${avg} ms`,
+                                                `95th Percentile: ${p95} ms`
+                                            ];
+                                        }
+                                    }
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Overall Performance'
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Timestamp'
+                                    }
+                                },
+                                y: {
+                                    title: {
+                                        display: true,
+                                        text: 'Request Count'
+                                    },
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                });
+            </script>
+
+            <!-- Chart 2: Average Time Pie Chart -->
+            <div class="chart-container">
+                <div style="text-align: center; margin-bottom: 10px;">
+                    <label for="avgTimeThreshold"><strong>Slowest API Calls (ms):</strong></label>
+                    <input type="number" id="avgTimeThreshold" value="1000" min="1" />
+                    <button id="updateAvgTimeBtn">Update Chart</button>
+                </div>
+                <canvas id="myChart2" style="width:700px; max-width:700px;"></canvas>
+            </div>
+
+            <!-- Chart 4: Request Query Bar Chart -->
+            <div class="chart-container">
+                <div style="text-align: center; margin-bottom: 10px;">
+                    <label for="queryBarThreshold"><strong>Slowest Internal Calls (ms):</strong></label>
+                    <input type="number" id="queryBarThreshold" value="50" min="1" />
+                    <button id="updateQueryBarChartBtn">Update Chart</button>
+                </div>
+                <canvas id="queryBarChart" style="width:100%; max-width:700px;"></canvas>
+            </div>
+
         </div>
-        <canvas id="myChart1" style="width: 700px; max-width: 700px;"></canvas>
-    </div>
 
-    <!-- Chart 2: Average Time Pie Chart -->
-    <div class="chart-container">
-        <div style="text-align: center; margin-bottom: 10px;">
-            <label for="avgTimeThreshold"><strong>Show request paths with average time greater than (ms):</strong></label>
-            <input type="number" id="avgTimeThreshold" value="1000" min="1" />
-            <button id="updateAvgTimeBtn">Update Chart</button>
-        </div>
-        <canvas id="myChart2" style="width:700px; max-width:700px;"></canvas>
-    </div>
 
-    <!-- Chart 3: Request Query Pie Chart -->
-    <div class="chart-container">
-        <div style="text-align: center; margin-bottom: 10px;">
-            <label for="queryCountThreshold"><strong>Show queries with count greater than:</strong></label>
-            <input type="number" id="queryCountThreshold" value="100" min="1" />
-            <button id="updateQueryPieChartBtn">Update Chart</button>
-        </div>
-        <canvas id="queryPieChart" style="width:700px; max-width:700px;"></canvas>
-    </div>
-
-    <!-- Chart 4: Request Query Bar Chart -->
-    <div class="chart-container">
-        <div style="text-align: center; margin-bottom: 10px;">
-            <label for="queryBarThreshold"><strong>Show queries in bar chart with count greater than:</strong></label>
-            <input type="number" id="queryBarThreshold" value="50" min="1" />
-            <button id="updateQueryBarChartBtn">Update Chart</button>
-        </div>
-        <canvas id="queryBarChart" style="width:100%; max-width:700px;"></canvas>
-    </div>
-
-</div>
-
-        <div class="file-info">
-            <h2>Uploaded Files:</h2>
-            {{if .FileNames}}
-                <ul>
-                    {{range .FileNames}}
-                        <li>{{.}}</li>
-                    {{end}}
-                </ul>
-            {{else}}
-                <p>No files uploaded yet.</p>
-            {{end}}
-        </div>
-
-        <!-- Show Charts when file is uploaded -->
-        <script>
-            document.addEventListener("DOMContentLoaded", function () {
-                document.getElementById("chartsContainer").style.display = "block";
-            });
-        </script>    
     
+    
+        
         <!-- Display results dynamically using Go's template engine -->
         {{ if .RequestPathStats }}
         <div class="result">
-            <h2>HTTP-IN-Response Request Path Counts:</h2>
+            <h2>Slowest Endpoints</h2>
             <table id="requestPathTable" class="display">
                 <thead>
                     <tr>
@@ -270,7 +414,7 @@
 
         {{ if .QueryMetrics }}
         <div class="result">
-            <h2>Request Query Metrics (Excluding callTypes:HTTP-IN-Request & HTTP-IN-Response):</h2>
+            <h2>Slowest Internal Operations</h2>
             <table id="queryMetricsTable" class="display">
                 <thead>
                     <tr>
@@ -298,32 +442,24 @@
                 </tbody>
             </table>
 
-            <h2>HTTP-In-Responses Data</h2>
+            <h2>Slowest Requests Analysis</h2>
             <table id="requestTable" class="display">
                 <thead>
                     <tr>
-                        <th>Timestamp</th>
+                        
                         <th>Correlation ID</th>
-                        <th>Thread ID</th>
-                        <th>Duration</th>
-                        <th>Call Type</th>
-                        <th>Start Time</th>
-                        <th>Method Name</th>
-                        <th>Request Query</th>
                         <th>Request Path</th>
+                        <th>Duration</th>
+                        
                     </tr>
                 </thead>
                 <tbody>{{range .HttpResponses}}
                     <tr>
-                        <td>{{ .Timestamp }}</td>
+                        
                         <td>{{ .CorrelationId }}</td>
-                        <td>{{ .ThreadId }}</td>
-                        <td>{{ .TotalDurationForRequest }}</td>
-                        <td>{{ .CallType }}</td>
-                        <td>{{ .StartTime }}</td>
-                        <td>{{ .MethodName }}</td>
-                        <td>{{ .RequestQuery }}</td>
                         <td>{{ .RequestPath }}</td>
+                        <td>{{ .TotalDurationForRequest }}</td>
+                            
                     </tr>
                     {{end}}
                 </tbody>                                
@@ -409,7 +545,7 @@
                 info: true,
                 lengthChange: true,
                 pageLength: 10,
-                order: [[3, "desc"]],
+                order: [[2, "desc"]],
             })
         })
 
@@ -448,124 +584,36 @@
         // Ensure each tab has a unique ID
         ensureTabUUID();
 
-        //Script for chart1 Pie chart
+
+
         document.addEventListener("DOMContentLoaded", function () {
             let chartInstance = null;
 
-            function generateColors(count) {
+            // Function to generate distinct HSL colors
+            function generateColors(count, saturation = "70%", lightness = "50%") {
                 let colors = [];
                 for (let i = 0; i < count; i++) {
                     let hue = (i * 137.5) % 360;
-                    colors.push(`hsl(${hue}, 70%, 50%)`);
+                    colors.push(`hsl(${hue}, ${saturation}, ${lightness})`);
                 }
                 return colors;
             }
 
-            function updateChart(threshold) {
-                const xValues = [];
-                const yValues = [];
-
-                document.querySelectorAll("#requestPathTable tbody tr").forEach(row => {
-                    let requestPath = row.querySelector(".request-path").dataset.path;
-                    let count = parseInt(row.cells[1].innerText);
-
-                    if (count > threshold) {
-                        xValues.push(requestPath);
-                        yValues.push(count);
-                    }
-                });
-
-                // Destroy existing chart if any
-                if (chartInstance) {
-                    chartInstance.destroy();
-                }
-
-                const chartContainer = document.getElementById("chartsContainer");
-
-                if (xValues.length > 0 && yValues.length > 0) {
-                    chartContainer.style.display = "block"; // ✅ Show chart container
-
-                    let dynamicColors = generateColors(xValues.length);
-
-                    chartInstance = new Chart("myChart1", {
-                        type: "pie",
-                        data: {
-                            labels: xValues,
-                            datasets: [{
-                                backgroundColor: dynamicColors,
-                                data: yValues,
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: false,
-                                tooltip: false
-                            },
-                            title: {
-                                display: true,
-                                text: `Request Path vs Counts (Count > ${threshold})`
-                            },
-                            onHover: function (e, activePoints) {
-                                if (activePoints.length > 0) {
-                                    var index = activePoints[0]._index;
-                                    console.log('Hovered over path:', xValues[index]);
-                                }
-                            },
-                            onClick: function (e) {
-                                var activePoints = chartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                                if (activePoints.length > 0) {
-                                    var index = activePoints[0]._index;
-                                    var selectedPath = xValues[index];
-                                    console.log('Navigating to request details for path:', selectedPath);
-                                    window.location.href = '/request-details?path=' + encodeURIComponent(selectedPath) + '&tabUUID=' + encodeURIComponent(window.name);
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    chartContainer.style.display = "none"; // ❌ Hide if no data
-                    console.log(`No request paths with count greater than ${threshold}.`);
-                }
-            }
-
-            // Initial chart render with default threshold
-            updateChart(1);
-
-            // Handle user-defined threshold updates
-            document.getElementById("updateChartBtn").addEventListener("click", function () {
-                const threshold = parseInt(document.getElementById("countThreshold").value) || 1;
-                updateChart(threshold);
-            });
-        });
-
-
-        //Script for Chart2 bar chart (Request Path vs Average time)
-        document.addEventListener("DOMContentLoaded", function () {
-            let chartInstance = null;
-            let fullQueries = []; // Only needed if you use it in the tooltip callback
-
-            function generateColors(count) {
-                let colors = [];
-                for (let i = 0; i < count; i++) {
-                    let hue = (i * 137.5) % 360;
-                    colors.push(`hsl(${hue}, 70%, 50%)`);
-                }
-                return colors;
-            }
-
+            // Function to build the bar chart
             function updateAvgTimeChart(threshold) {
                 const xValues = [];
-                const yValues = [];
+                const avgValues = [];
+                const p95Values = [];
 
                 document.querySelectorAll("#requestPathTable tbody tr").forEach(row => {
                     let requestPath = row.querySelector(".request-path").dataset.path;
-                    let avgTime = parseFloat(row.cells[2].innerText);
+                    let avgTime = parseFloat(row.cells[2].innerText.trim());
+                    let p95Time = parseFloat(row.cells[3].innerText.trim());
 
                     if (avgTime > threshold) {
                         xValues.push(requestPath);
-                        yValues.push(avgTime);
+                        avgValues.push(avgTime);
+                        p95Values.push(p95Time);
                     }
                 });
 
@@ -575,53 +623,63 @@
                     chartInstance.destroy();
                 }
 
-                if (xValues.length > 0 && yValues.length > 0) {
+                if (xValues.length > 0) {
                     chartContainer.style.display = "block";
 
-                    let dynamicColors = generateColors(xValues.length);
+                    const avgColors = generateColors(xValues.length, "70%", "50%");
+                    const p95Colors = generateColors(xValues.length, "70%", "70%");
 
-                    chartInstance = new Chart("myChart2", {
+                    const ctx = document.getElementById("myChart2").getContext("2d");
+
+                    chartInstance = new Chart(ctx, {
                         type: "bar",
                         data: {
                             labels: xValues,
-                            datasets: [{
-                                backgroundColor: dynamicColors,
-                                data: yValues
-                            }]
+                            datasets: [
+                                {
+                                    label: "Avg Time (ms)",
+                                    backgroundColor: avgColors,
+                                    data: avgValues
+                                },
+                                {
+                                    label: "95th Percentile (ms)",
+                                    backgroundColor: p95Colors,
+                                    data: p95Values
+                                }
+                            ]
                         },
                         options: {
                             responsive: true,
-                            plugins: {
-                                tooltip: {
-                                    callbacks: {
-                                        title: function (tooltipItems) {
-                                            let index = tooltipItems[0].dataIndex;
-                                            return fullQueries[index] || xValues[index]; // fallback to path if full query is not defined
-                                        },
-                                        label: function (tooltipItem) {
-                                            return `Avg Time: ${tooltipItem.raw} ms`;
-                                        }
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        maxRotation: 45,
+                                        minRotation: 45
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: "Response Time (ms)"
                                     }
                                 }
                             },
-                            legend: { display: false },
-                            title: {
-                                display: true,
-                                text: `Request Path vs Average Time (ms) (AvgTime > ${threshold}ms)`
-                            },
-                            onHover: function (event, activeElements) {
-                                if (activeElements.length > 0) {
-                                    let index = activeElements[0]._index;
-                                    let hoveredPath = xValues[index];
-                                    console.log('Hovered over path:', hoveredPath);
-                                }
-                            },
-                            onClick: function (event, elements) {
-                                if (elements.length > 0) {
-                                    let index = elements[0]._index;
-                                    let selectedPath = xValues[index];
-                                    console.log('Navigating to request details for path:', selectedPath);
-                                    window.location.href = '/request-details?path=' + encodeURIComponent(selectedPath) + '&tabUUID=' + encodeURIComponent(window.name);
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (tooltipItem) {
+                                            return `${tooltipItem.dataset.label}: ${tooltipItem.raw} ms`;
+                                        }
+                                    }
+                                },
+                                legend: {
+                                    display: true
+                                },
+                                title: {
+                                    display: true,
+                                    text: `Request Path vs Time (ms) (AvgTime > ${threshold}ms)`
                                 }
                             }
                         }
@@ -633,9 +691,10 @@
             }
 
             // Initial render with default threshold
-            updateAvgTimeChart(1000);
+            const defaultThreshold = parseInt(document.getElementById("avgTimeThreshold").value) || 1000;
+            updateAvgTimeChart(defaultThreshold);
 
-            // Event listener for update button
+            // Update chart on button click
             document.getElementById("updateAvgTimeBtn").addEventListener("click", function () {
                 const threshold = parseInt(document.getElementById("avgTimeThreshold").value) || 1000;
                 updateAvgTimeChart(threshold);
@@ -643,107 +702,19 @@
         });
 
 
-        // Script for Chart3 - Pie chart (Request Query vs Count)
-        document.addEventListener("DOMContentLoaded", function () {
-            let queryChart; // Hold the chart instance
-            const fullQueries = []; // Store full queries for click navigation
 
-            function generateColors(count) {
-                let colors = [];
-                for (let i = 0; i < count; i++) {
-                    let hue = (i * 137.5) % 360;
-                    colors.push(`hsl(${hue}, 70%, 50%)`);
-                }
-                return colors;
-            }
 
-            function updateQueryPieChart() {
-                const threshold = parseInt(document.getElementById("queryCountThreshold").value) || 100;
-
-                const xValues = [];
-                const yValues = [];
-                fullQueries.length = 0; // Clear the previous full queries
-
-                document.querySelectorAll("#queryMetricsTable tbody tr").forEach(row => {
-                    const query = row.cells[6].innerText;
-                    const count = parseInt(row.cells[1].innerText);
-
-                    if (count > threshold) {
-                        fullQueries.push(query);
-                        const truncatedQuery = query.length > 30 ? query.substring(0, 30) + "..." : query;
-                        xValues.push(truncatedQuery);
-                        yValues.push(count);
-                    }
-                });
-
-                if (queryChart) {
-                    queryChart.destroy(); // Destroy previous chart instance
-                }
-
-                if (xValues.length > 0 && yValues.length > 0) {
-                    const dynamicColors = generateColors(xValues.length);
-                    const ctx = document.getElementById("queryPieChart");
-
-                    queryChart = new Chart(ctx, {
-                        type: "pie",
-                        data: {
-                            labels: xValues,
-                            datasets: [{
-                                backgroundColor: dynamicColors,
-                                data: yValues,
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: false,
-                                tooltip: false
-                            },
-                            title: {
-                                display: true,
-                                text: `Request Queries vs Counts (Count > ${threshold})`
-                            },
-                            onHover: function (e, activePoints) {
-                                if (activePoints.length > 0) {
-                                    const index = activePoints[0]._index;
-                                    console.log('Hovered over query:', fullQueries[index]);
-                                }
-                            },
-                            onClick: function (e) {
-                                const activePoints = queryChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                                if (activePoints.length > 0) {
-                                    const index = activePoints[0]._index;
-                                    const selectedQuery = fullQueries[index];
-                                    console.log('Navigating to queryExecutions for query:', selectedQuery);
-
-                                    window.location.href = `/queryExecutions?query=${encodeURIComponent(selectedQuery)}&tabUUID=${encodeURIComponent(window.name)}`;
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    console.log(`No queries with count greater than ${threshold}.`);
-                }
-            }
-
-            // Initial chart render
-            updateQueryPieChart();
-
-            // Re-render chart when Update button is clicked
-            document.getElementById("updateQueryPieChartBtn").addEventListener("click", updateQueryPieChart);
-        });
-
+    
 
         // Script for Chart4 - Bar chart (Request Query vs Average Time)
         document.addEventListener("DOMContentLoaded", function () {
             let chartInstance = null;
 
             // Function to generate distinct colors dynamically
-            function generateColors(count) {
+            function generateColors(count, baseHue = 0) {
                 let colors = [];
                 for (let i = 0; i < count; i++) {
-                    let hue = (i * 137.5) % 360; // Distribute hues evenly
+                    let hue = (baseHue + i * 137.5) % 360;
                     colors.push(`hsl(${hue}, 70%, 50%)`);
                 }
                 return colors;
@@ -752,19 +723,22 @@
             // Function to build the chart based on the threshold
             function buildQueryBarChart(threshold) {
                 let xValues = [];
-                let yValues = [];
+                let avgTimeValues = [];
+                let percentile95Values = [];
                 let fullQueries = [];
 
                 document.querySelectorAll("#queryMetricsTable tbody tr").forEach(row => {
-                    let query = row.cells[6].innerText.trim(); // Request Query
-                    let avgTime = parseFloat(row.cells[3].innerText.trim()); // Average Time
+                    let query = row.cells[6].innerText.trim();       // Request Query
+                    let avgTime = parseFloat(row.cells[3].innerText.trim());  // Average Time
+                    let percentile95 = parseFloat(row.cells[5].innerText.trim()); // 95th Percentile
 
                     if (avgTime > threshold) {
                         fullQueries.push(query);
 
                         let truncatedQuery = query.length > 30 ? query.substring(0, 30) + "..." : query;
                         xValues.push(truncatedQuery);
-                        yValues.push(avgTime);
+                        avgTimeValues.push(avgTime);
+                        percentile95Values.push(percentile95);
                     }
                 });
 
@@ -772,18 +746,25 @@
                     chartInstance.destroy(); // Destroy previous chart instance if it exists
                 }
 
-                if (xValues.length > 0 && yValues.length > 0) {
-                    let dynamicColors = generateColors(xValues.length);
-
+                if (xValues.length > 0) {
                     const ctx = document.getElementById("queryBarChart").getContext("2d");
+
                     chartInstance = new Chart(ctx, {
                         type: "bar",
                         data: {
                             labels: xValues,
-                            datasets: [{
-                                backgroundColor: dynamicColors,
-                                data: yValues
-                            }]
+                            datasets: [
+                                {
+                                    label: "Average Time",
+                                    backgroundColor: "rgba(75, 192, 192, 0.7)",
+                                    data: avgTimeValues
+                                },
+                                {
+                                    label: "95th Percentile",
+                                    backgroundColor: "rgba(255, 99, 132, 0.7)",
+                                    data: percentile95Values
+                                }
+                            ]
                         },
                         options: {
                             responsive: true,
@@ -793,7 +774,7 @@
                                     ticks: {
                                         maxRotation: 45,
                                         minRotation: 45,
-                                        callback: function(value, index) {
+                                        callback: function (value, index) {
                                             return xValues[index];
                                         }
                                     }
@@ -802,40 +783,41 @@
                                     beginAtZero: true,
                                     title: {
                                         display: true,
-                                        text: 'Average Time (ms)'
+                                        text: 'Time (ms)'
                                     }
                                 }
                             },
                             plugins: {
                                 tooltip: {
                                     callbacks: {
-                                        title: function(tooltipItems) {
+                                        title: function (tooltipItems) {
                                             let index = tooltipItems[0].dataIndex;
                                             return fullQueries[index];
                                         },
-                                        label: function(tooltipItem) {
-                                            return `Avg Time: ${tooltipItem.raw} ms`;
+                                        label: function (tooltipItem) {
+                                            return `${tooltipItem.dataset.label}: ${tooltipItem.raw} ms`;
                                         }
                                     }
+                                },
+                                legend: {
+                                    display: true
+                                },
+                                title: {
+                                    display: true,
+                                    text: `Request Queries vs Time (ms) (AvgTime > ${threshold}ms)`
                                 }
                             },
-                            legend: { display: false },
-                            title: {
-                                display: true,
-                                text: `Request Queries vs Average Time (ms) (AvgTime > ${threshold}ms)`
-                            },
-                            onHover: function(e, activePoints) {
+                            onHover: function (e, activePoints) {
                                 if (activePoints.length > 0) {
-                                    var index = activePoints[0].index;
-                                    var hoveredQuery = fullQueries[index];
-                                    console.log('Hovered over query:', hoveredQuery);
+                                    let index = activePoints[0].index;
+                                    console.log('Hovered over query:', fullQueries[index]);
                                 }
                             },
                             onClick: function (e) {
-                                var activePoints = chartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                                let activePoints = chartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
                                 if (activePoints.length > 0) {
-                                    var index = activePoints[0].index;
-                                    var selectedQuery = fullQueries[index];
+                                    let index = activePoints[0].index;
+                                    let selectedQuery = fullQueries[index];
                                     console.log('Navigating to queryExecutions for query:', selectedQuery);
 
                                     window.location.href = `/queryExecutions?query=${encodeURIComponent(selectedQuery)}&tabUUID=${encodeURIComponent(window.name)}`;
@@ -858,27 +840,6 @@
                 buildQueryBarChart(newThreshold);
             });
         });
-
-
-        //Toggle button js
-        document.getElementById('toggleDarkMode').addEventListener('click', function () {
-            document.body.classList.toggle('dark-mode');
-
-        // Optional: Save preference to localStorage
-        if (document.body.classList.contains('dark-mode')) {
-            localStorage.setItem('theme', 'dark');
-        } else {
-            localStorage.setItem('theme', 'light');
-        }
-        });
-
-        // On load: apply saved theme
-        window.onload = function () {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark') {
-                document.body.classList.add('dark-mode');
-            }
-        };   
 
     </script>    
 </body>
