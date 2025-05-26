@@ -8,9 +8,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
+
+
 
 // FileDetail holds the structured content extracted from an uploaded file
 type FileDetail struct {
@@ -46,6 +49,8 @@ type RequestPathStats struct {
 	AverageTime float64
 	MaxTime     float64
 	MinTime     float64
+	Durations   []float64
+	Percentile  float64
 }
 
 // QueryMetrics holds statistics for request queries
@@ -55,6 +60,8 @@ type QueryMetrics struct {
 	AverageTime float64
 	MaxTime     float64
 	MinTime     float64
+	Durations   []float64
+	Percentile  float64
 }
 
 // Stores statistics for request queries per tab
@@ -273,14 +280,16 @@ func calculateRequestPathStats(tabUUID string, resetStats bool) {
 			// Initialize stats for a new request path if it doesn't exist
 			if _, exists := requestPathStats[tabUUID][fileDetail.RequestPath]; !exists {
 				requestPathStats[tabUUID][fileDetail.RequestPath] = &RequestPathStats{
-					MaxTime: duration, // Set MaxTime as the first value
-					MinTime: duration, // Set MinTime as the first value (even if 0)
+					MaxTime:   duration, // Set MaxTime as the first value
+					MinTime:   duration, // Set MinTime as the first value (even if 0)
+					Durations: []float64{},
 				}
 			}
 
 			stats := requestPathStats[tabUUID][fileDetail.RequestPath]
 			stats.Count++
 			stats.TotalTime += duration
+			stats.Durations = append(stats.Durations, duration)
 			stats.AverageTime = stats.TotalTime / float64(stats.Count)
 
 			// Update MaxTime if the current duration is greater
@@ -297,6 +306,16 @@ func calculateRequestPathStats(tabUUID string, resetStats bool) {
 				stats.MinTime = stats.MaxTime // If only 1 occurrence, set MinTime = MaxTime
 			}
 		}
+	}
+
+	for _, stats := range requestPathStats[tabUUID] {
+		if len(stats.Durations) > 0 {
+			sort.Float64s(stats.Durations)
+			index := int(0.95 * float64(len(stats.Durations)-1))
+			stats.Percentile = stats.Durations[index]
+
+		}
+
 	}
 }
 
@@ -397,9 +416,13 @@ func calculateQueryMetrics(tabUUID string) {
 
 		// Ensure the query exists in the map
 		if _, exists := queryMetricsMap[tabUUID][query]; !exists {
+			if queryMetricsMap[tabUUID] == nil {
+				queryMetricsMap[tabUUID] = make(map[string]*QueryMetrics)
+			}
 			queryMetricsMap[tabUUID][query] = &QueryMetrics{
-				MaxTime: 0,
-				MinTime: 1e9, // Set a high initial MinTime
+				MaxTime:   0,
+				MinTime:   1e9, // Set a high initial MinTime
+				Durations: []float64{},
 			}
 		}
 
@@ -407,6 +430,7 @@ func calculateQueryMetrics(tabUUID string) {
 		metrics.Count++
 		metrics.TotalTime += duration
 		metrics.AverageTime = metrics.TotalTime / float64(metrics.Count)
+		metrics.Durations = append(metrics.Durations, duration)
 
 		// Update MaxTime if the current duration is greater
 		if duration > metrics.MaxTime {
@@ -416,6 +440,19 @@ func calculateQueryMetrics(tabUUID string) {
 		// Update MinTime
 		if duration < metrics.MinTime {
 			metrics.MinTime = duration
+		}
+	}
+
+	//Calculate the 95th percentile for each query
+	for _, queryMetrics := range queryMetricsMap[tabUUID] {
+		sort.Float64s(queryMetrics.Durations)
+		n := len(queryMetrics.Durations)
+		if n > 0 {
+			index := int(float64(n)*0.95+0.5) - 1
+			if index >= n {
+				index = n - 1
+			}
+			queryMetrics.Percentile = queryMetrics.Durations[index]
 		}
 	}
 }

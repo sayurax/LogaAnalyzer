@@ -1,9 +1,9 @@
 package main
 
 import (
+	"Log_Anallyzer/handlers"
 	"fmt"
 	"net/http"
-	"Log_Anallyzer/handlers"
 	"os"
 )
 
