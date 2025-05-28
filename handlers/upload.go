@@ -28,10 +28,11 @@ type FileDetail struct {
 }
 
 type TimeBucketStats struct {
-	RequestCount int
-	Durations    []float64
-	AvgDuration  float64
-	Percentile95 float64
+	RequestCount  int
+	ResponseCount int
+	Durations     []float64
+	AvgDuration   float64
+	Percentile95  float64
 }
 
 var uploadedFiles []FileDetail                                   // uploadedFiles stores the content of all uploaded files
@@ -194,16 +195,15 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Println("---- Time Buckets ----")
 		for bucketTime, stats := range timeBuckets {
-			log.Printf("Time Bucket: %s | Request Count: %d | Average Duration: %.2f ms | 95th Percentile: %.2f ms\n",
-				bucketTime, stats.RequestCount, stats.AvgDuration, stats.Percentile95)
+			log.Printf("Time Bucket: %s | Request Count: %d | Average Duration: %.2f ms | 95th Percentile: %.2f ms\n | Response Count: %d |",
+				bucketTime, stats.RequestCount, stats.AvgDuration, stats.Percentile95, stats.ResponseCount)
 		}
 		log.Println("---- End of Time Buckets ----")
 
 		saveFilesAsJSON(uploadedFiles, tabUUID)
 
 		tmpl := template.Must(template.New("index.html").Funcs(template.FuncMap{
-			"marshal": marshal,
-		}).ParseFiles("template/index.html"))
+			"marshal": marshal}).ParseFiles("template/index.html"))
 		err = tmpl.Execute(w, TemplateData{
 			RequestPathStats:    requestPathStats[tabUUID],
 			QueryMetrics:        queryMetricsMap[tabUUID],
@@ -275,8 +275,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tmpl := template.Must(template.New("index.html").Funcs(template.FuncMap{
-			"marshal": marshal,
-		}).ParseFiles("template/index.html"))
+			"marshal": marshal}).ParseFiles("template/index.html"))
 		err := tmpl.Execute(w, TemplateData{
 			RequestPathStats:    requestPathStats[tabUUID],
 			QueryMetrics:        queryMetricsMap[tabUUID],
@@ -310,11 +309,6 @@ func aggregateByTime(uploadedFiles []FileDetail, bucketDuration time.Duration) m
 	buckets := make(map[string]*TimeBucketStats)
 
 	for _, f := range uploadedFiles {
-		// Only process HTTP inbound requests
-		if f.CallType != "HTTP-In-Request" {
-			continue
-		}
-
 		t, err := time.Parse(customLayout, f.Timestamp)
 		if err != nil {
 			log.Printf("Invalid timestamp: %s\n", f.Timestamp)
@@ -323,28 +317,38 @@ func aggregateByTime(uploadedFiles []FileDetail, bucketDuration time.Duration) m
 
 		bucketTime := t.Truncate(bucketDuration).Format("15:04:05")
 
-		duration, err := strconv.ParseFloat(f.TotalDurationForRequest, 64)
-		if err != nil {
-			log.Printf("Invalid duration: %s\n", f.TotalDurationForRequest)
-			continue
-		}
-
 		if _, exists := buckets[bucketTime]; !exists {
 			buckets[bucketTime] = &TimeBucketStats{Durations: []float64{}}
 		}
-
 		bucket := buckets[bucketTime]
-		bucket.RequestCount++
-		bucket.Durations = append(bucket.Durations, duration)
+
+		switch f.CallType {
+		case "HTTP-In-Request":
+			bucket.RequestCount++
+
+		case "HTTP-In-Response":
+			bucket.ResponseCount++
+
+			duration, err := strconv.ParseFloat(f.TotalDurationForRequest, 64)
+			if err != nil {
+				log.Printf("Invalid duration: %s\n", f.TotalDurationForRequest)
+				continue
+			}
+			bucket.Durations = append(bucket.Durations, duration)
+		}
 	}
 
+	// Compute stats for responses
 	for _, bucket := range buckets {
+		if len(bucket.Durations) == 0 {
+			continue
+		}
 		total := 0.0
 		sort.Float64s(bucket.Durations)
 		for _, d := range bucket.Durations {
 			total += d
 		}
-		bucket.AvgDuration = total / float64(bucket.RequestCount)
+		bucket.AvgDuration = total / float64(len(bucket.Durations))
 		idx := int(0.95 * float64(len(bucket.Durations)-1))
 		bucket.Percentile95 = bucket.Durations[idx]
 	}
@@ -422,9 +426,13 @@ func calculateRequestPathStats(tabUUID string, resetStats bool) {
 	var totalHTTPDuration float64
 	var allDurations []float64
 
+	requestCorrelationIDs := make(map[string]struct{})
+	responseCorrelationIDs := make(map[string]struct{})
+
 	for _, fileDetail := range uploadedFiles {
 		if strings.EqualFold(fileDetail.CallType, "HTTP-IN-Request") {
 			totalHTTPRequests++
+			requestCorrelationIDs[fileDetail.CorrelationId] = struct{}{}
 		}
 
 		if strings.EqualFold(fileDetail.CallType, "HTTP-IN-Response") {
@@ -436,6 +444,7 @@ func calculateRequestPathStats(tabUUID string, resetStats bool) {
 			totalHTTPResponses++
 			totalHTTPDuration += duration
 			allDurations = append(allDurations, duration)
+			responseCorrelationIDs[fileDetail.CorrelationId] = struct{}{}
 
 			if _, exists := requestPathStats[tabUUID][fileDetail.RequestPath]; !exists {
 				requestPathStats[tabUUID][fileDetail.RequestPath] = &RequestPathStats{
@@ -460,6 +469,7 @@ func calculateRequestPathStats(tabUUID string, resetStats bool) {
 		}
 	}
 
+	// Calculate 95th percentile for each request path
 	for _, stats := range requestPathStats[tabUUID] {
 		if len(stats.Durations) > 0 {
 			sort.Float64s(stats.Durations)
@@ -480,11 +490,19 @@ func calculateRequestPathStats(tabUUID string, resetStats bool) {
 		fmt.Printf("Overall 95th Percentile Duration: %.2f ms\n", globalPercentile)
 	}
 
-	// Log whether all requests have corresponding responses
-	if totalHTTPRequests == totalHTTPResponses {
-		fmt.Println("✅ All requests are completed in this file.")
+	// Check if all request correlation IDs have matching response correlation IDs
+	allMatched := true
+	for id := range requestCorrelationIDs {
+		if _, found := responseCorrelationIDs[id]; !found {
+			allMatched = false
+			break
+		}
+	}
+
+	if allMatched {
+		fmt.Println("✅ All requests have matching responses in this file.")
 	} else {
-		fmt.Println("⚠️  Not all requests are completed in this file. Some responses might be in another file.")
+		fmt.Println("⚠️  Not all requests have matching responses. Some responses might be in another file.")
 	}
 }
 

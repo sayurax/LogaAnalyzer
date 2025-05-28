@@ -155,7 +155,7 @@
             align-items: center;
             width: 100%;
             margin-top: 20px;
-            height: 400px;  /* Add a consistent height */
+            height: 500px;  /* Add a consistent height */
         }
 
         .performance-info {
@@ -286,99 +286,132 @@
 
 
             <script>
-                document.addEventListener('DOMContentLoaded', function () {
-                    const rawTimeBuckets = JSON.parse(document.getElementById('timeBucketData').textContent || '{}');
+document.addEventListener('DOMContentLoaded', function () {
+    const rawTimeBuckets = JSON.parse(document.getElementById('timeBucketData').textContent || '{}');
 
-                    // Debug: Ensure it's not empty
-                    console.log("Parsed time bucket data:", rawTimeBuckets);
+    console.log("Parsed time bucket data:", rawTimeBuckets);
 
-                    const labels = Object.keys(rawTimeBuckets).sort();
-                    const durations = labels.map(k => rawTimeBuckets[k].AvgDuration);
-                    const requestCounts = labels.map(k => rawTimeBuckets[k].RequestCount);
-                    const percentiles = labels.map(k => rawTimeBuckets[k].Percentile95);
+    const labels = Object.keys(rawTimeBuckets).sort();
+    const durations = labels.map(k => rawTimeBuckets[k].AvgDuration);
+    const requestCounts = labels.map(k => rawTimeBuckets[k].RequestCount);
+    const percentiles = labels.map(k => rawTimeBuckets[k].Percentile95);
 
-                    const ctx = document.getElementById('timeBucketChart').getContext('2d');
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Request Count',
-                                data: requestCounts,
-                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const index = context.dataIndex;
-                                            const count = requestCounts[index];
-                                            const avg = durations[index].toFixed(2);
-                                            const p95 = percentiles[index].toFixed(2);
-                                            return [
-                                                `Requests: ${count}`,
-                                                `Avg Duration: ${avg} ms`,
-                                                `95th Percentile: ${p95} ms`
-                                            ];
-                                        }
-                                    }
-                                },
-                                title: {
-                                    display: true,
-                                    text: 'Overall Performance'
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Timestamp'
-                                    }
-                                },
-                                y: {
-                                    title: {
-                                        display: true,
-                                        text: 'Request Count'
-                                    },
-                                    beginAtZero: true
-                                }
-                            }
+    const ctx = document.getElementById('timeBucketChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar', // Base type
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Request Count',
+                    data: requestCounts,
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: '95th Percentile (ms)',
+                    data: percentiles,
+                    type: 'line',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const index = context.dataIndex;
+                            const count = requestCounts[index];
+                            const avg = durations[index].toFixed(2);
+                            const p95 = percentiles[index].toFixed(2);
+                            return [
+                                `Requests: ${count}`,
+                                `Avg Duration: ${avg} ms`,
+                                `95th Percentile: ${p95} ms`
+                            ];
                         }
-                    });
-                });
-            </script>
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Overall Performance'
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Timestamp'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Request Count'
+                    },
+                    beginAtZero: true
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Duration (ms)'
+                    },
+                    beginAtZero: true,
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
 
-            <!-- Chart 2: Average Time Pie Chart -->
-            <div class="chart-container">
-                <div style="text-align: center; margin-bottom: 10px;">
-                    <label for="avgTimeThreshold"><strong>Slowest API Calls (ms):</strong></label>
-                    <input type="number" id="avgTimeThreshold" value="1000" min="1" />
-                    <button id="updateAvgTimeBtn">Update Chart</button>
-                </div>
-                <canvas id="myChart2" style="width:700px; max-width:700px;"></canvas>
-            </div>
 
-            <!-- Chart 4: Request Query Bar Chart -->
-            <div class="chart-container">
-                <div style="text-align: center; margin-bottom: 10px;">
-                    <label for="queryBarThreshold"><strong>Slowest Internal Calls (ms):</strong></label>
-                    <input type="number" id="queryBarThreshold" value="50" min="1" />
-                    <button id="updateQueryBarChartBtn">Update Chart</button>
+            <!-- Flex container to hold both chart sections side by side -->
+            <div style="display: flex; justify-content: center; align-items: flex-start; gap: 40px; flex-wrap: wrap;">
+
+                <!-- Chart 2 Container -->
+                <div class="chart-container" style="flex: 1; max-width: 700px; flex-direction: column; display: flex;">
+                    <!-- Controls above chart -->
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <label for="avgTimeThreshold"><strong>Slowest API Calls (ms):</strong></label>
+                        <input type="number" id="avgTimeThreshold" value="1000" min="1" style="width: 80px;" />
+                        <button id="updateAvgTimeBtn">Update Chart</button>
+                    </div>
+                    <!-- Chart canvas -->
+                    <canvas id="myChart2" style="width: 100%; max-width: 700px; "></canvas>
                 </div>
-                <canvas id="queryBarChart" style="width:100%; max-width:700px;"></canvas>
+
+
+                <!-- Chart 4 Container -->
+                <div class="chart-container" style="flex: 1; max-width: 700px; flex-direction: column; display: flex;">
+                    <!-- Controls above chart -->
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <label for="queryBarThreshold"><strong>Slowest Internal Calls (ms):</strong></label>
+                        <input type="number" id="queryBarThreshold" value="50" min="1" style="width: 80px;" />
+                        <button id="updateQueryBarChartBtn">Update Chart</button>
+                    </div>
+                    <!-- Chart canvas -->
+                    <canvas id="queryBarChart" style="width: 100%; max-width: 700px; ;"></canvas>
+                </div>
+
             </div>
 
         </div>
 
-
-    
-    
-        
         <!-- Display results dynamically using Go's template engine -->
         {{ if .RequestPathStats }}
         <div class="result">
@@ -446,20 +479,16 @@
             <table id="requestTable" class="display">
                 <thead>
                     <tr>
-                        
                         <th>Correlation ID</th>
                         <th>Request Path</th>
-                        <th>Duration</th>
-                        
+                        <th>Duration</th>    
                     </tr>
                 </thead>
                 <tbody>{{range .HttpResponses}}
                     <tr>
-                        
                         <td>{{ .CorrelationId }}</td>
                         <td>{{ .RequestPath }}</td>
-                        <td>{{ .TotalDurationForRequest }}</td>
-                            
+                        <td>{{ .TotalDurationForRequest }}</td>                            
                     </tr>
                     {{end}}
                 </tbody>                                
@@ -496,7 +525,7 @@
 
                 window.location.href = '/request-details?path=' + encodeURIComponent(path) + '&tabUUID=' + encodeURIComponent(window.name);
             });
-         });
+        });
 
         // Initialize DataTables for the Query Stats table
         $(document).ready(function () {
@@ -638,12 +667,12 @@
                             datasets: [
                                 {
                                     label: "Avg Time (ms)",
-                                    backgroundColor: avgColors,
+                                    backgroundColor: "rgba(75, 192, 192, 0.7)",
                                     data: avgValues
                                 },
                                 {
                                     label: "95th Percentile (ms)",
-                                    backgroundColor: p95Colors,
+                                    backgroundColor: "rgba(255, 99, 132, 0.7)",
                                     data: p95Values
                                 }
                             ]
@@ -701,10 +730,6 @@
             });
         });
 
-
-
-
-    
 
         // Script for Chart4 - Bar chart (Request Query vs Average Time)
         document.addEventListener("DOMContentLoaded", function () {

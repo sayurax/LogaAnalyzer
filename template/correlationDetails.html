@@ -61,6 +61,50 @@
         tr:hover {
             background-color: #ddd;
         }
+        .query-block {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        font-size: 10px;
+        color: black;
+    }
+
+    .query-bar {
+        position: relative;
+        height: 30px;
+        /* border-radius: 4px; */
+        width: 100%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: transparent; /* Hide text by default */
+        user-select: none;
+    }
+
+    /* Optional: show duration on hover */
+    .query-bar:hover {
+        color: white;
+    }
+
+    .tooltip {
+        position: absolute;
+        bottom: 35px;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        padding: 2px 6px;
+        font-size: 10px;
+        border-radius: 3px;
+        display: none;
+        white-space: nowrap;
+        z-index: 10;
+    }
+
+    .query-block:hover .tooltip {
+        display: block;
+    }
     </style>
 </head>
 <body> 
@@ -99,102 +143,60 @@
     </table>
     
     
-        <table id="summaryTable" class="display">
-            <thead>
-                <tr>
-                    <th>Total Duration (ms)</th>
-                    <th>Total Duration for Query Calls (ms)</th>
-                    <th>Time Difference (ms)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{.TotalDuration}}</td>
-                    <td>{{.TotalExecutionTime}}</td>
-                    <td>{{.DurationDifference}}</td>
-                </tr>
-            </tbody>
-        </table>
+    <table id="summaryTable" class="display">
+        <thead>
+            <tr>
+                <th>Total Duration (ms)</th>
+                <th>Total Duration for Query Calls (ms)</th>
+                <th>Time Difference (ms)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{.TotalDuration}}</td>
+                <td>{{.TotalExecutionTime}}</td>
+                <td>{{.DurationDifference}}</td>
+            </tr>
+        </tbody>
+    </table>
     
 
-    <h2>Query Execution Time Chart</h2>
-    <div id="container" style="width:100%; height:500px;"></div>
-    
+    <h2>Query Execution Timeline</h2>
+    <div style="overflow-x: auto; border: 1px solid #ccc; padding: 20px;">
+    <div id="stacked-chart" style="display: flex; align-items: flex-end; gap: 4px; height: 80px;"></div>
+    </div>
+
     <script>
-        // Pass timeDifferences as a JSON object to JavaScript
-        var timeDifferences = JSON.parse('{{ .TimeDifferences | toJSON }}');
-        console.log(timeDifferences);
+        const timeDifferences = JSON.parse('{{ .TimeDifferences | toJSON }}');
+        const chart = document.getElementById('stacked-chart');
 
-        var data=[];
+        timeDifferences.forEach(element => {
+            const queryName = element.query === "Idle" ? "java_processing" :
+                            (element.query === null ? element.CallType || "unknown" : element.query);
+            const duration = element.duration;
 
-        timeDifferences.slice().reverse().forEach(element => {
-        if (element.query == "Idle") {
-            data.push({ name: "java_processing", data: [element.duration], color: 'grey' });
-        }
-        else if (element.query === "null"){
-            data.push({ name: element.CallType, data: [element.duration], color: 'red' });
-        }
-        else {
-            data.push({ name: element.query, data: [element.duration], color: 'red' });
-        }
-    });
+            const block = document.createElement('div');
+            block.className = 'query-block';
+            block.style.width = `${Math.max(duration / 2, 2)}px`; // scale duration
 
-        console.log(data);
-        console.log(timeDifferences);
-    
-        Highcharts.chart('container', {
-            chart: {
-                type: 'bar'
-            },
-            title: {
-                text: 'Query Execution Time Comparison',
-                align: 'left'
-            },
-            xAxis: {
-                categories: ['Query 1']
-            },
-            yAxis: {
-                min: 0,
-                title: {   
-                    text: 'Time (ms)'
-                }
-            },
-            legend: {
-                reversed: true
-            },
-            plotOptions: {
-                series: {
-                    stacking: 'normal',
-                    dataLabels: {
-                        enabled: true
-                    },
-                    point: {
-                        events: {
-                            mouseOver: function () {
-                                copyToClipboard(this.series.name);
-                            }
-                        }
-                    }
-                }
-            },
-            tooltip: {
-                formatter: function () {
-                    return `<b>${this.series.name}</b>: ${this.y} ms`;
-                }
-            },
-            series: data    
+            const bar = document.createElement('div');
+            bar.className = 'query-bar';
+            bar.style.backgroundColor = (element.query === "Idle") ? 'grey' : 'tomato';
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = `${queryName} | ${duration}ms`;
+
+            const label = document.createElement('div');
+            label.textContent = `${duration}ms`;
+            bar.appendChild(label);  // move label inside bar
+
+            block.appendChild(tooltip);
+            block.appendChild(bar);
+            chart.appendChild(block);
         });
-
-        // Function to copy text to clipboard
-    function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
-            console.log(`Copied: ${text}`);
-        }).catch(err => {
-            console.error('Failed to copy:', err);
-        });
-}
     </script>
-     
+  
     <h2>Request Query Statistics</h2>
     <table id="correlationStats" class="display">
         <thead>
