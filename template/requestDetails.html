@@ -169,34 +169,34 @@
 
         // Initialize DataTables for the Query Stats table
         $(document).ready(function () {
-    $('#queryStats').DataTable({
-        paging: true,
-        searching: true,
-        ordering: true,
-        info: true,
-        lengthChange: true,
-        pageLength: 50,
-        order: [[3, "desc"]] // Sorting by "Elapsed Time per Exec (ms)" column
-    });
+            $('#queryStats').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 50,
+                order: [[3, "desc"]] // Sorting by "Elapsed Time per Exec (ms)" column
+            });
 
-    // Attach click event to the "Executions" column cells
-    $('#queryStats tbody').on('click', '.queries', function () {
-        var query = $(this).closest('tr').find('td:last').text().trim(); // Get query from last column
-        
-        // Retrieve tabUUID and path from the URL
-        var urlParams = new URLSearchParams(window.location.search);
-        var tabUUID = urlParams.get("tabUUID");
-        var path = urlParams.get("path");
+            // Attach click event to the "Executions" column cells
+            $('#queryStats tbody').on('click', '.queries', function () {
+                var query = $(this).closest('tr').find('td:last').text().trim(); // Get query from last column
+                
+                // Retrieve tabUUID and path from the URL
+                var urlParams = new URLSearchParams(window.location.search);
+                var tabUUID = urlParams.get("tabUUID");
+                var path = urlParams.get("path");
 
-        if (query && tabUUID && path) {
-            // Redirect to the query executions page with parameters
-            window.location.href = `/queryExecutionsForRequestPath?query=${encodeURIComponent(query)}&tabUUID=${encodeURIComponent(tabUUID)}&path=${encodeURIComponent(path)}`;
-        } else {
-            console.error("Missing query, tabUUID, or path");
-            alert("Error: Missing query, tabUUID, or path");
-        }
-    });
-});
+                if (query && tabUUID && path) {
+                    // Redirect to the query executions page with parameters
+                    window.location.href = `/queryExecutionsForRequestPath?query=${encodeURIComponent(query)}&tabUUID=${encodeURIComponent(tabUUID)}&path=${encodeURIComponent(path)}`;
+                } else {
+                    console.error("Missing query, tabUUID, or path");
+                    alert("Error: Missing query, tabUUID, or path");
+                }
+            });
+        });
 
     </script>   
 </body>

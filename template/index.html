@@ -190,7 +190,6 @@
             color: #007bff;
         }
 
-        /* ✅ Completion Message */
         .completion-message {
             margin-top: 20px;
             padding: 12px 16px;
@@ -286,98 +285,98 @@
 
 
             <script>
-document.addEventListener('DOMContentLoaded', function () {
-    const rawTimeBuckets = JSON.parse(document.getElementById('timeBucketData').textContent || '{}');
+                document.addEventListener('DOMContentLoaded', function () {
+                    const rawTimeBuckets = JSON.parse(document.getElementById('timeBucketData').textContent || '{}');
 
-    console.log("Parsed time bucket data:", rawTimeBuckets);
+                    console.log("Parsed time bucket data:", rawTimeBuckets);
 
-    const labels = Object.keys(rawTimeBuckets).sort();
-    const durations = labels.map(k => rawTimeBuckets[k].AvgDuration);
-    const requestCounts = labels.map(k => rawTimeBuckets[k].RequestCount);
-    const percentiles = labels.map(k => rawTimeBuckets[k].Percentile95);
+                    const labels = Object.keys(rawTimeBuckets).sort();
+                    const durations = labels.map(k => rawTimeBuckets[k].AvgDuration);
+                    const requestCounts = labels.map(k => rawTimeBuckets[k].RequestCount);
+                    const percentiles = labels.map(k => rawTimeBuckets[k].Percentile95);
 
-    const ctx = document.getElementById('timeBucketChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'bar', // Base type
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Request Count',
-                    data: requestCounts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1,
-                    yAxisID: 'y'
-                },
-                {
-                    label: '95th Percentile (ms)',
-                    data: percentiles,
-                    type: 'line',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                    fill: false,
-                    tension: 0.3,
-                    yAxisID: 'y1'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const index = context.dataIndex;
-                            const count = requestCounts[index];
-                            const avg = durations[index].toFixed(2);
-                            const p95 = percentiles[index].toFixed(2);
-                            return [
-                                `Requests: ${count}`,
-                                `Avg Duration: ${avg} ms`,
-                                `95th Percentile: ${p95} ms`
-                            ];
+                    const ctx = document.getElementById('timeBucketChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar', // Base type
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Request Count',
+                                    data: requestCounts,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1,
+                                    yAxisID: 'y'
+                                },
+                                {
+                                    label: '95th Percentile (ms)',
+                                    data: percentiles,
+                                    type: 'line',
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                    fill: false,
+                                    tension: 0.3,
+                                    yAxisID: 'y1'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const index = context.dataIndex;
+                                            const count = requestCounts[index];
+                                            const avg = durations[index].toFixed(2);
+                                            const p95 = percentiles[index].toFixed(2);
+                                            return [
+                                                `Requests: ${count}`,
+                                                `Avg Duration: ${avg} ms`,
+                                                `95th Percentile: ${p95} ms`
+                                            ];
+                                        }
+                                    }
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Overall Performance'
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Timestamp'
+                                    }
+                                },
+                                y: {
+                                    type: 'linear',
+                                    position: 'left',
+                                    title: {
+                                        display: true,
+                                        text: 'Request Count'
+                                    },
+                                    beginAtZero: true
+                                },
+                                y1: {
+                                    type: 'linear',
+                                    position: 'right',
+                                    title: {
+                                        display: true,
+                                        text: 'Duration (ms)'
+                                    },
+                                    beginAtZero: true,
+                                    grid: {
+                                        drawOnChartArea: false
+                                    }
+                                }
+                            }
                         }
-                    }
-                },
-                title: {
-                    display: true,
-                    text: 'Overall Performance'
-                }
-            },
-            scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Timestamp'
-                    }
-                },
-                y: {
-                    type: 'linear',
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Request Count'
-                    },
-                    beginAtZero: true
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Duration (ms)'
-                    },
-                    beginAtZero: true,
-                    grid: {
-                        drawOnChartArea: false
-                    }
-                }
-            }
-        }
-    });
-});
-</script>
+                    });
+                });
+            </script>
 
 
             <!-- Flex container to hold both chart sections side by side -->
