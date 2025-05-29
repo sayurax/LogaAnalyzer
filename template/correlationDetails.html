@@ -162,8 +162,20 @@
     
 
     <h2>Query Execution Timeline</h2>
+
     <div style="overflow-x: auto; border: 1px solid #ccc; padding: 20px;">
-    <div id="stacked-chart" style="display: flex; align-items: flex-end; gap: 4px; height: 80px;"></div>
+        <!-- Legend for colors -->
+        <div style="margin-bottom: 10px;">
+            <span style="display: inline-flex; align-items: center; margin-right: 15px;">
+                <span style="width: 12px; height: 12px; background-color: tomato; display: inline-block; margin-right: 5px;"></span>
+                Query Execution
+            </span>
+            <span style="display: inline-flex; align-items: center;">
+                <span style="width: 12px; height: 12px; background-color: grey; display: inline-block; margin-right: 5px;"></span>
+                Execution Idle Time
+            </span>
+        </div>
+        <div id="stacked-chart" style="display: flex; align-items: flex-end; gap: 4px; height: 80px;"></div>
     </div>
 
     <script>
@@ -232,7 +244,7 @@
                 info: true,
                 lengthChange: true,
                 pageLength: 10,
-                order: [[0, "desc"]]
+                order: [[0, "asc"]]
             });
         });
     </script>

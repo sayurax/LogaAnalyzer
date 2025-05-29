@@ -135,22 +135,20 @@
     <script>
         // Initialize DataTables
         $(document).ready(function () {
-            var table = $('#requestDetailsTable').DataTable();
-
-            if (!$.fn.dataTable.isDataTable('#requestDetailsTable')) {
-                $('#requestDetailsTable').DataTable({
-                    paging: true,
-                    searching: true,
-                    ordering: true,
-                    info: true,
-                    lengthChange: true,
-                    pageLength: 50,
-                    columDefs: [
-                        {type: "num", targets: 3}
-                    ],
-                    order: [[3, "desc"]]
-                });
-            }
+        if (!$.fn.dataTable.isDataTable('#requestDetailsTable')) {
+            $('#requestDetailsTable').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 50,
+                order: [[3, "desc"]], // 4th column (Duration), descending order
+                columnDefs: [
+                    { type: "num", targets: 3 } // Ensure Duration column is sorted as numeric
+                ]
+            });
+        }
 
             // Click Event For Table Rows
             $('#requestDetailsTable tbody').on('click', 'tr', function () {
@@ -179,10 +177,10 @@
                 order: [[3, "desc"]] // Sorting by "Elapsed Time per Exec (ms)" column
             });
 
-            // Attach click event to the "Executions" column cells
-            $('#queryStats tbody').on('click', '.queries', function () {
-                var query = $(this).closest('tr').find('td:last').text().trim(); // Get query from last column
-                
+            // Attach click event to the entire row
+            $('#queryStats tbody').on('click', 'tr', function () {
+                var query = $(this).find('td:last').text().trim(); // Get query from last column
+
                 // Retrieve tabUUID and path from the URL
                 var urlParams = new URLSearchParams(window.location.search);
                 var tabUUID = urlParams.get("tabUUID");

@@ -498,31 +498,45 @@
     <script>
         // Initialize DataTables
         $(document).ready(function () {
-            // Ensure DataTables is initialized only once
-            if (!$.fn.dataTable.isDataTable('#requestPathTable')) {
-                $('#requestPathTable').DataTable({
-                    paging: true,
-                    searching: true,
-                    ordering: true,
-                    info: true,
-                    lengthChange: true,
-                    pageLength: 10,
-                    columnDefs: [
-                        { type: "num", targets: 3 } // Ensure Average Time column is treated as a number
-                    ],
-                    order: [[3, "desc"]] // Sort by Average Time (ms) in descending order
-                });
+        // Ensure DataTables is initialized only once
+        if (!$.fn.dataTable.isDataTable('#requestPathTable')) {
+            $('#requestPathTable').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 10,
+                columnDefs: [
+                    { type: "num", targets: 3 } // Ensure Average Time column is treated as a number
+                ],
+                order: [[3, "desc"]] // Sort by Average Time (ms) in descending order
+            });
+        }
+
+        // Make entire row clickable
+        $('#requestPathTable tbody').on('click', 'tr', function () {
+            // Assuming data-path is set on <tr>, if not, extract from a cell
+            var path = $(this).data('path');
+            
+            // If not available via data attribute, extract from first column (adjust index if needed)
+            if (!path) {
+                path = $(this).find('td').eq(0).text().trim();
             }
 
-            // Click event for navigating to request details
-            $(document).on('click', '.request-path', function () {
-                var path = $(this).data('path');
+            if (path) {
+                var tabUUID = window.name; // assuming tab UUID is stored in window.name
                 console.log('Navigating to:', path);
-                console.log('Tab UUID:', window.name); // Tab UUID print
+                console.log('Tab UUID:', tabUUID);
 
-                window.location.href = '/request-details?path=' + encodeURIComponent(path) + '&tabUUID=' + encodeURIComponent(window.name);
-            });
+                window.location.href = '/request-details?path=' + encodeURIComponent(path) + '&tabUUID=' + encodeURIComponent(tabUUID);
+            } else {
+                console.error('Path not found for the clicked row');
+                alert('Error: Path not found');
+            }
         });
+    });
+
 
         // Initialize DataTables for the Query Stats table
         $(document).ready(function () {
@@ -540,15 +554,15 @@
 
             console.log("DataTable initialized successfully.");
 
-            // Attach click event to the executions cells
-            $('#queryMetricsTable tbody').on('click', '.all-queries', function () {
+            // Attach click event to the entire row
+            $('#queryMetricsTable tbody').on('click', 'tr', function () {
                 console.log("Row clicked in queryMetricsTable.");
 
                 // Retrieve the query text from the last cell in the clicked row
-                var query = $(this).closest('tr').find('td:last').text().trim();
+                var query = $(this).find('td:last').text().trim();
                 console.log("Extracted query:", query);
 
-                // Get tabUUID from the URL parameters
+                // Get tabUUID from window.name
                 var tabUUID = window.name;
                 console.log("Tab UUID:", tabUUID);
 
@@ -561,6 +575,7 @@
                 }
             });
         });
+
 
 
         $(document).ready(function (){
