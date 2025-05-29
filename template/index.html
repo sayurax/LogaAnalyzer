@@ -279,10 +279,10 @@
                 });
             </script>
             
+
             <script id="timeBucketData" type="application/json">
                 {{ marshal .TimeBuckets }}
             </script>
-
 
             <script>
                 document.addEventListener('DOMContentLoaded', function () {
@@ -395,7 +395,7 @@
                 </div>
 
 
-                <!-- Chart 4 Container -->
+                <!-- Chart 3 Container -->
                 <div class="chart-container" style="flex: 1; max-width: 700px; flex-direction: column; display: flex;">
                     <!-- Controls above chart -->
                     <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -434,9 +434,7 @@
                         <td>{{ printf "%.2f" $details.AverageTime }}</td>%
                         <td>{{ printf "%.2f" $details.Percentile}}</td>
                         <td>{{ printf "%.2f" $details.MaxTime}}</td>
-                        <td>{{ printf "%.2f" $details.MinTime}}</td>
-                        
-                        
+                        <td>{{ printf "%.2f" $details.MinTime}}</td>   
                     </tr>
                     {{ end }}
                 </tbody>
@@ -679,6 +677,13 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            onClick: function (event, elements) {
+                                if (elements.length > 0) {
+                                    const index = elements[0].index;
+                                    const path = xValues[index];
+                                    window.location.href = '/request-details?path=' + encodeURIComponent(path) + '&tabUUID=' + encodeURIComponent(window.name);
+                                }
+                            },
                             scales: {
                                 x: {
                                     ticks: {
@@ -711,6 +716,7 @@
                                 }
                             }
                         }
+
                     });
                 } else {
                     chartContainer.style.display = "none";

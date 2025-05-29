@@ -125,6 +125,7 @@ func RequestDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// readRequestDataFromFile reads and parses JSON data from a file into a slice of FileDetail structs.
 func readRequestDataFromFile(filename string) ([]FileDetail, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -140,6 +141,7 @@ func readRequestDataFromFile(filename string) ([]FileDetail, error) {
 	return requestData, nil
 }
 
+// getRelevantJSONFile searches for a JSON file in the specified directory that contains the given tabUUID in its name.
 func getRelevantJSONFile(directory, tabUUID string) (string, error) {
 	files, err := os.ReadDir(directory)
 	if err != nil {
